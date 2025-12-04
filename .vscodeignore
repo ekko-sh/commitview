@@ -1,0 +1,13 @@
+.vscode/**
+src/**
+node_modules/**
+!node_modules/@kwsites/**
+!node_modules/debug/**
+!node_modules/ms/**
+!node_modules/simple-git/**
+*.ts
+tsconfig.json
+webpack.config.js
+.gitignore
+*.vsix
+whitebg.jpg
