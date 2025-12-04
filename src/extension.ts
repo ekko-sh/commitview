@@ -4,14 +4,19 @@ import { CommitService } from './services/CommitService';
 import { WorktreeManager } from './services/WorktreeManager';
 import { FileCopyService } from './services/FileCopyService';
 import { DiffService } from './services/DiffService';
+import { WindowStateService } from './services/WindowStateService';
 import { WindowTracker } from './ipc/WindowTracker';
 import { DiffTreeProvider } from './providers/DiffTreeProvider';
+import { CommitListProvider, CommitTreeItem } from './providers/CommitListProvider';
+import { WorktreeListProvider } from './providers/WorktreeListProvider';
 import { selectCommitCommand } from './commands/selectCommit';
 import { quickSwitchCommand } from './commands/quickSwitch';
 import { closeWorktreeCommand, cleanupAllCommand } from './commands/cleanup';
+import { CommitViewError, getUserFriendlyMessage } from './utils/errors';
 
 let worktreeManager: WorktreeManager;
 let windowTracker: WindowTracker;
+let windowStateService: WindowStateService;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log('CommitView extension activating...');
@@ -23,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const fileCopyService = new FileCopyService();
   const diffService = new DiffService();
   windowTracker = new WindowTracker(context.globalState);
+  windowStateService = new WindowStateService(context.globalState);
 
   // Get current workspace path
   const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -46,13 +52,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     windowTracker.getActivePairs().length > 0
   );
 
+  // Register Commit List View (sidebar)
+  const commitListProvider = new CommitListProvider(commitService, gitService);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('commitview.commits', commitListProvider)
+  );
+
+  // Register Worktree List View (sidebar)
+  const worktreeListProvider = new WorktreeListProvider(worktreeManager);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('commitview.activeWorktrees', worktreeListProvider)
+  );
+
   // Register Diff Tree View (only for worktree windows)
   const diffTreeProvider = new DiffTreeProvider(diffService);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('commitview.diffSummary', diffTreeProvider)
   );
 
-  // Initialize diff view if this is a worktree window
+  // Initialize providers
+  await commitListProvider.initialize();
+
+  // Initialize diff view and restore window state if this is a worktree window
   if (isWorktreeWindow && worktreeInfo) {
     try {
       const currentSha = await gitService.getCurrentCommitSha(worktreeInfo.originalRepoPath);
@@ -64,6 +85,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     } catch (error) {
       console.error('Failed to initialize diff view:', error);
     }
+
+    // Restore window state (open files, terminals) from original window
+    try {
+      await windowStateService.restoreState(workspacePath!);
+    } catch (error) {
+      console.error('Failed to restore window state:', error);
+    }
   }
 
   // Register commands
@@ -71,6 +99,112 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('commitview.selectCommit', () =>
       selectCommitCommand(gitService, commitService, worktreeManager, fileCopyService, windowTracker)
     )
+  );
+
+  // Command to view a specific commit from the tree view
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitview.viewCommit', async (item: CommitTreeItem) => {
+      if (!item?.commit) {
+        return;
+      }
+
+      const commit = item.commit;
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+
+      if (!workspaceFolder) {
+        return;
+      }
+
+      const repoPath = workspaceFolder.uri.fsPath;
+
+      // Check if worktree already exists for this commit
+      const existingWorktree = await worktreeManager.findWorktreeByCommit(repoPath, commit.sha);
+
+      if (existingWorktree) {
+        // Just open the existing one
+        await vscode.commands.executeCommand(
+          'vscode.openFolder',
+          vscode.Uri.file(existingWorktree.path),
+          { forceNewWindow: true }
+        );
+        return;
+      }
+
+      // Show confirmation popup
+      const confirm = await vscode.window.showInformationMessage(
+        `Open commit "${commit.subject}" (${commit.shortSha}) in a new window?`,
+        { modal: false },
+        'Open',
+        'Cancel'
+      );
+
+      if (confirm !== 'Open') {
+        return;
+      }
+
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Opening commit ${commit.shortSha}...`,
+          cancellable: false,
+        },
+        async (progress) => {
+          try {
+            progress.report({ message: 'Creating worktree...' });
+
+            const worktree = await worktreeManager.createWorktree(
+              repoPath,
+              commit.sha,
+              commit.subject
+            );
+
+            // Copy config files
+            progress.report({ message: 'Copying configuration files...' });
+            const copyResult = await fileCopyService.copyConfigFiles(repoPath, worktree.path);
+
+            if (copyResult.copied.length > 0) {
+              const fileList = copyResult.copied.slice(0, 3).join(', ');
+              const moreCount = copyResult.copied.length > 3 ? ` +${copyResult.copied.length - 3} more` : '';
+              vscode.window.showInformationMessage(`Copied: ${fileList}${moreCount}`);
+            }
+
+            // Capture current window state (open files, terminals)
+            progress.report({ message: 'Capturing window state...' });
+            const windowState = windowStateService.captureCurrentState(repoPath);
+            await windowStateService.saveStateForWorktree(worktree.path, windowState);
+
+            // Register window pair
+            windowTracker.registerWindowPair(repoPath, worktree.path);
+
+            // Refresh worktree list
+            worktreeListProvider.refresh();
+
+            // Open in new window
+            progress.report({ message: 'Opening new window...' });
+
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.file(worktree.path),
+              { forceNewWindow: true }
+            );
+          } catch (error) {
+            if (error instanceof CommitViewError) {
+              vscode.window.showErrorMessage(getUserFriendlyMessage(error.code));
+            } else {
+              vscode.window.showErrorMessage(
+                `Failed to open commit: ${error instanceof Error ? error.message : String(error)}`
+              );
+            }
+          }
+        }
+      );
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitview.refreshCommits', () => {
+      commitListProvider.refresh();
+    })
   );
 
   context.subscriptions.push(
@@ -86,15 +220,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('commitview.closeWorktree', () =>
-      closeWorktreeCommand(worktreeManager, windowTracker)
-    )
+    vscode.commands.registerCommand('commitview.closeWorktree', async (item?: { worktree?: { path: string } }) => {
+      if (item?.worktree) {
+        // Called from worktree list view
+        await worktreeManager.removeWorktree(item.worktree.path);
+        windowTracker.unregisterWindowPair(item.worktree.path);
+        worktreeListProvider.refresh();
+        vscode.window.showInformationMessage('Worktree cleaned up.');
+      } else {
+        // Called from command palette or current worktree window
+        await closeWorktreeCommand(worktreeManager, windowTracker);
+      }
+    })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('commitview.cleanupAll', () =>
-      cleanupAllCommand(worktreeManager)
-    )
+    vscode.commands.registerCommand('commitview.cleanupAll', async () => {
+      await cleanupAllCommand(worktreeManager);
+      worktreeListProvider.refresh();
+    })
   );
 
   // Create status bar button
@@ -134,6 +278,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const cleanedCount = await worktreeManager.cleanupStaleWorktrees();
     if (cleanedCount > 0) {
       console.log(`CommitView: Cleaned up ${cleanedCount} stale worktree(s)`);
+      worktreeListProvider.refresh();
     }
   } catch (error) {
     console.error('Failed to cleanup stale worktrees:', error);

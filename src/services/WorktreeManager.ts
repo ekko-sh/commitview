@@ -25,9 +25,15 @@ export class WorktreeManager {
     commitSha: string,
     commitMessage: string
   ): Promise<WorktreeInfo> {
+    // Check if we already have a worktree for this commit
+    const existing = await this.findWorktreeByCommit(repoPath, commitSha);
+    if (existing) {
+      return existing;
+    }
+
     const repoName = await this.gitService.getRepoName(repoPath);
     const shortSha = commitSha.substring(0, 7);
-    const worktreePath = generateWorktreePath(repoName, shortSha);
+    const worktreePath = generateWorktreePath(repoName, shortSha, commitMessage);
 
     await this.gitService.createWorktree(repoPath, worktreePath, commitSha);
 
@@ -43,6 +49,25 @@ export class WorktreeManager {
     await this.trackWorktree(worktree);
 
     return worktree;
+  }
+
+  async findWorktreeByCommit(repoPath: string, commitSha: string): Promise<WorktreeInfo | null> {
+    const trackedWorktrees = this.getTrackedWorktrees();
+    const existing = trackedWorktrees.find(
+      (w) => w.originalRepoPath === repoPath && w.commitSha === commitSha
+    );
+
+    // Verify the directory still exists
+    if (existing && fs.existsSync(existing.path)) {
+      return existing;
+    }
+
+    // Clean up if directory was deleted
+    if (existing) {
+      await this.untrackWorktree(existing.path);
+    }
+
+    return null;
   }
 
   async removeWorktree(worktreePath: string): Promise<void> {

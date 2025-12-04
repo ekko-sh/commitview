@@ -33,6 +33,12 @@
         "icon": "$(git-commit)"
       },
       {
+        "command": "commitview.viewCommit",
+        "title": "View This Commit",
+        "category": "CommitView",
+        "icon": "$(link-external)"
+      },
+      {
         "command": "commitview.quickSwitch",
         "title": "Switch to Partner Window",
         "category": "CommitView",
@@ -55,6 +61,12 @@
         "title": "Cleanup All CommitView Worktrees",
         "category": "CommitView",
         "icon": "$(trash)"
+      },
+      {
+        "command": "commitview.refreshCommits",
+        "title": "Refresh Commit List",
+        "category": "CommitView",
+        "icon": "$(refresh)"
       }
     ],
     "keybindings": [
@@ -76,6 +88,53 @@
         "when": "commitview.isWorktreeWindow"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "commitview",
+          "title": "CommitView",
+          "icon": "$(git-compare)"
+        }
+      ]
+    },
+    "views": {
+      "commitview": [
+        {
+          "id": "commitview.commits",
+          "name": "Commits",
+          "contextualTitle": "Recent Commits"
+        },
+        {
+          "id": "commitview.activeWorktrees",
+          "name": "Active Worktrees",
+          "contextualTitle": "Open Worktrees"
+        }
+      ],
+      "scm": [
+        {
+          "id": "commitview.diffSummary",
+          "name": "CommitView Diff",
+          "when": "commitview.isWorktreeWindow",
+          "contextualTitle": "Changed Files"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "commitview.commits",
+        "contents": "Loading commits...",
+        "when": "commitview.loading"
+      },
+      {
+        "view": "commitview.commits",
+        "contents": "No git repository found.\n\nOpen a folder with a git repository to see commits.",
+        "when": "!gitOpenRepositoryCount"
+      },
+      {
+        "view": "commitview.activeWorktrees",
+        "contents": "No active worktrees.\n\nClick on a commit above to view it in a new window."
+      }
+    ],
     "menus": {
       "commandPalette": [
         {
@@ -92,6 +151,39 @@
         {
           "command": "commitview.closeWorktree",
           "when": "commitview.isWorktreeWindow"
+        },
+        {
+          "command": "commitview.viewCommit",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "commitview.refreshCommits",
+          "when": "view == commitview.commits",
+          "group": "navigation"
+        },
+        {
+          "command": "commitview.cleanupAll",
+          "when": "view == commitview.activeWorktrees",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "commitview.viewCommit",
+          "when": "view == commitview.commits && viewItem == commit",
+          "group": "inline"
+        },
+        {
+          "command": "commitview.quickSwitch",
+          "when": "view == commitview.activeWorktrees && viewItem == worktree",
+          "group": "inline"
+        },
+        {
+          "command": "commitview.closeWorktree",
+          "when": "view == commitview.activeWorktrees && viewItem == worktree",
+          "group": "inline"
         }
       ],
       "scm/title": [
@@ -114,23 +206,13 @@
         }
       ]
     },
-    "views": {
-      "scm": [
-        {
-          "id": "commitview.diffSummary",
-          "name": "CommitView Diff",
-          "when": "commitview.isWorktreeWindow",
-          "contextualTitle": "Changed Files"
-        }
-      ]
-    },
     "configuration": {
       "title": "CommitView",
       "properties": {
         "commitview.maxCommitHistory": {
           "type": "number",
-          "default": 100,
-          "description": "Maximum number of commits to show in the quick pick selector"
+          "default": 50,
+          "description": "Maximum number of commits to show in the sidebar"
         },
         "commitview.autoCleanupOnClose": {
           "type": "boolean",

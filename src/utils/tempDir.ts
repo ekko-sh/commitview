@@ -7,10 +7,28 @@ export function getTempDir(): string {
   return os.tmpdir();
 }
 
-export function generateWorktreePath(repoName: string, shortSha: string): string {
-  const uuid = randomUUID().substring(0, 8);
-  const safeName = repoName.replace(/[^a-zA-Z0-9-_]/g, '-');
-  return path.join(getTempDir(), `commitview-${safeName}-${shortSha}-${uuid}`);
+export function generateWorktreePath(repoName: string, shortSha: string, commitSubject?: string): string {
+  const safeName = repoName.replace(/[^a-zA-Z0-9-_]/g, '-').substring(0, 20);
+
+  // Create a short, readable version of the commit message
+  let shortMessage = '';
+  if (commitSubject) {
+    shortMessage = commitSubject
+      .toLowerCase()
+      .replace(/[^a-zA-Z0-9\s]/g, '')  // Remove special chars
+      .trim()
+      .split(/\s+/)                      // Split by whitespace
+      .slice(0, 3)                       // Take first 3 words
+      .join('-')
+      .substring(0, 25);                 // Max 25 chars
+  }
+
+  // Format: temp-{repo}-{sha}-{message}
+  const folderName = shortMessage
+    ? `temp-${safeName}-${shortSha}-${shortMessage}`
+    : `temp-${safeName}-${shortSha}`;
+
+  return path.join(getTempDir(), folderName);
 }
 
 export function ensureDirectoryExists(dirPath: string): void {
@@ -27,5 +45,5 @@ export function removeDirectory(dirPath: string): void {
 
 export function isCommitViewTempPath(dirPath: string): boolean {
   const basename = path.basename(dirPath);
-  return basename.startsWith('commitview-');
+  return basename.startsWith('temp-') || basename.startsWith('commitview-');
 }
