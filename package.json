@@ -1,0 +1,197 @@
+{
+  "name": "commitview",
+  "displayName": "CommitView",
+  "description": "Quickly view and compare code at any historical commit using Git worktrees",
+  "version": "0.1.0",
+  "publisher": "ekko",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "worktree",
+    "commit",
+    "diff",
+    "history",
+    "compare"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:.git"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "commitview.selectCommit",
+        "title": "View Commit in New Window",
+        "category": "CommitView",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "commitview.quickSwitch",
+        "title": "Switch to Partner Window",
+        "category": "CommitView",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "commitview.showDiffSummary",
+        "title": "Show Diff Summary",
+        "category": "CommitView",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "commitview.closeWorktree",
+        "title": "Close and Cleanup Worktree",
+        "category": "CommitView",
+        "icon": "$(close)"
+      },
+      {
+        "command": "commitview.cleanupAll",
+        "title": "Cleanup All CommitView Worktrees",
+        "category": "CommitView",
+        "icon": "$(trash)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "commitview.selectCommit",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "gitOpenRepositoryCount > 0"
+      },
+      {
+        "command": "commitview.quickSwitch",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+ctrl+s"
+      },
+      {
+        "command": "commitview.showDiffSummary",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "commitview.isWorktreeWindow"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "commitview.selectCommit",
+          "when": "gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "commitview.quickSwitch"
+        },
+        {
+          "command": "commitview.showDiffSummary",
+          "when": "commitview.isWorktreeWindow"
+        },
+        {
+          "command": "commitview.closeWorktree",
+          "when": "commitview.isWorktreeWindow"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "commitview.selectCommit",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "commitview.selectCommit",
+          "group": "navigation",
+          "when": "gitOpenRepositoryCount > 0 && resourceScheme == file"
+        },
+        {
+          "command": "commitview.quickSwitch",
+          "group": "navigation",
+          "when": "commitview.isWorktreeWindow"
+        }
+      ]
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "commitview.diffSummary",
+          "name": "CommitView Diff",
+          "when": "commitview.isWorktreeWindow",
+          "contextualTitle": "Changed Files"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CommitView",
+      "properties": {
+        "commitview.maxCommitHistory": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of commits to show in the quick pick selector"
+        },
+        "commitview.autoCleanupOnClose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically cleanup worktree when VS Code window closes"
+        },
+        "commitview.filesToCopy": {
+          "type": "array",
+          "default": [
+            ".env",
+            ".env.*",
+            ".npmrc",
+            ".yarnrc",
+            ".nvmrc"
+          ],
+          "description": "File patterns to copy from original repo to worktree"
+        },
+        "commitview.additionalFilesToCopy": {
+          "type": "array",
+          "default": [],
+          "description": "Additional file patterns to copy (added to default list)"
+        },
+        "commitview.warnOnSecretsCopy": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show warning dialog before copying files that might contain secrets"
+        },
+        "commitview.secretsPatterns": {
+          "type": "array",
+          "default": [
+            "*secret*",
+            "*credential*",
+            "*key*",
+            "*token*",
+            "*password*"
+          ],
+          "description": "File patterns that trigger a security warning before copying"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "simple-git": "^3.21.0"
+  }
+}
