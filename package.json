@@ -262,14 +262,22 @@
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
     "test:unit": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "publish": "vsce publish && ovsx publish",
+    "publish:patch": "vsce publish patch && ovsx publish",
+    "publish:minor": "vsce publish minor && ovsx publish",
+    "publish:major": "vsce publish major && ovsx publish",
+    "publish:vsce": "vsce publish",
+    "publish:ovsx": "ovsx publish"
   },
   "devDependencies": {
     "@types/node": "^20.19.25",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/vsce": "^3.7.1",
     "eslint": "^8.55.0",
+    "ovsx": "^0.10.7",
     "ts-loader": "^9.5.1",
     "typescript": "^5.3.2",
     "vitest": "^4.0.15",
