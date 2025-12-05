@@ -25,8 +25,16 @@ export class FileCopyService {
 
     const result: FileCopyResult = { linked: [], skipped: [], failed: [], warnings: [] };
 
-    const files = this.findMatchingEntries(sourceDir, [...filePatterns, ...additionalPatterns], 'file');
+    // Find directories to link (root level only)
     const dirs = this.findMatchingEntries(sourceDir, directoryPatterns, 'directory');
+
+    // Find files recursively, but skip directories that will be symlinked
+    const skipDirs = new Set(dirs);
+    const files = this.findMatchingFilesRecursive(
+      sourceDir,
+      [...filePatterns, ...additionalPatterns],
+      skipDirs
+    );
 
     for (const file of files) {
       this.linkEntry(sourceDir, targetDir, file, 'file', result);
@@ -42,13 +50,13 @@ export class FileCopyService {
   private linkEntry(
     sourceDir: string,
     targetDir: string,
-    name: string,
+    relativePath: string,
     type: EntryType,
     result: FileCopyResult
   ): void {
-    const sourcePath = path.join(sourceDir, name);
-    const targetPath = path.join(targetDir, name);
-    const displayName = type === 'directory' ? `${name}/` : name;
+    const sourcePath = path.join(sourceDir, relativePath);
+    const targetPath = path.join(targetDir, relativePath);
+    const displayName = type === 'directory' ? `${relativePath}/` : relativePath;
 
     if (fs.existsSync(targetPath)) {
       result.skipped.push(displayName);
@@ -70,6 +78,34 @@ export class FileCopyService {
     if (!fs.existsSync(parentDir)) {
       fs.mkdirSync(parentDir, { recursive: true });
     }
+  }
+
+  private findMatchingFilesRecursive(
+    baseDir: string,
+    patterns: string[],
+    skipDirs: Set<string>,
+    currentDir: string = ''
+  ): string[] {
+    const matches: string[] = [];
+    const fullDir = currentDir ? path.join(baseDir, currentDir) : baseDir;
+
+    try {
+      const entries = fs.readdirSync(fullDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const relativePath = currentDir ? path.join(currentDir, entry.name) : entry.name;
+
+        if (entry.isFile() && patterns.some(p => this.matchesGlob(entry.name, p))) {
+          matches.push(relativePath);
+        } else if (entry.isDirectory() && !skipDirs.has(entry.name) && !entry.name.startsWith('.git')) {
+          matches.push(...this.findMatchingFilesRecursive(baseDir, patterns, skipDirs, relativePath));
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to read directory ${fullDir}:`, error);
+    }
+
+    return matches;
   }
 
   private findMatchingEntries(dir: string, patterns: string[], type: EntryType): string[] {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- **Nested .env file support** — `.env` files in subdirectories (e.g., `packages/api/.env`) are now automatically symlinked
+- Recursively searches all subdirectories for config files
+- Skips `node_modules`, `venv`, `.git` and other symlinked directories during search
+
 ## 0.1.2
 
 - **Symlinks instead of copying** — `.env` files and directories like `node_modules`, `venv` are now symlinked

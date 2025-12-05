@@ -261,8 +261,6 @@
     "package": "webpack --mode production --devtool hidden-source-map",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
-    "test:unit": "vitest run",
-    "test:watch": "vitest",
     "publish": "vsce publish && ovsx publish",
     "publish:patch": "vsce publish patch && ovsx publish",
     "publish:minor": "vsce publish minor && ovsx publish",
@@ -280,7 +278,6 @@
     "ovsx": "^0.10.7",
     "ts-loader": "^9.5.1",
     "typescript": "^5.3.2",
-    "vitest": "^4.0.15",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
   },
