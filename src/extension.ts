@@ -158,14 +158,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               commit.subject
             );
 
-            // Copy config files
-            progress.report({ message: 'Copying configuration files...' });
-            const copyResult = await fileCopyService.copyConfigFiles(repoPath, worktree.path);
+            // Link config files and directories
+            progress.report({ message: 'Linking configuration files...' });
+            const linkResult = await fileCopyService.linkConfigFiles(repoPath, worktree.path);
 
-            if (copyResult.copied.length > 0) {
-              const fileList = copyResult.copied.slice(0, 3).join(', ');
-              const moreCount = copyResult.copied.length > 3 ? ` +${copyResult.copied.length - 3} more` : '';
-              vscode.window.showInformationMessage(`Copied: ${fileList}${moreCount}`);
+            if (linkResult.linked.length > 0) {
+              const fileList = linkResult.linked.slice(0, 3).join(', ');
+              const moreCount = linkResult.linked.length > 3 ? ` +${linkResult.linked.length - 3} more` : '';
+              vscode.window.showInformationMessage(`Linked: ${fileList}${moreCount}`);
             }
 
             // Capture current window state (open files, terminals)

@@ -65,7 +65,7 @@ export async function selectCommitCommand(
   }
 
   // Create worktree
-  vscode.window.withProgress(
+  await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: 'Creating worktree...',
@@ -81,19 +81,19 @@ export async function selectCommitCommand(
           selectedCommit.subject
         );
 
-        // Copy config files
-        progress.report({ message: 'Copying configuration files...' });
-        const copyResult = await fileCopyService.copyConfigFiles(repoPath, worktree.path);
+        // Link config files and directories
+        progress.report({ message: 'Linking configuration files...' });
+        const linkResult = await fileCopyService.linkConfigFiles(repoPath, worktree.path);
 
-        if (copyResult.copied.length > 0) {
-          const fileList = copyResult.copied.slice(0, 3).join(', ');
-          const moreCount = copyResult.copied.length > 3 ? ` +${copyResult.copied.length - 3} more` : '';
-          vscode.window.showInformationMessage(`Copied: ${fileList}${moreCount}`);
+        if (linkResult.linked.length > 0) {
+          const fileList = linkResult.linked.slice(0, 3).join(', ');
+          const moreCount = linkResult.linked.length > 3 ? ` +${linkResult.linked.length - 3} more` : '';
+          vscode.window.showInformationMessage(`Linked: ${fileList}${moreCount}`);
         }
 
-        if (copyResult.failed.length > 0) {
+        if (linkResult.failed.length > 0) {
           vscode.window.showWarningMessage(
-            `Failed to copy: ${copyResult.failed.join(', ')}`
+            `Failed to link: ${linkResult.failed.join(', ')}`
           );
         }
 

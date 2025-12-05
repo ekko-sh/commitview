@@ -3,175 +3,93 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface FileCopyResult {
-  copied: string[];
+  linked: string[];
   skipped: string[];
   failed: string[];
   warnings: string[];
 }
 
+type EntryType = 'file' | 'directory';
+
 export class FileCopyService {
-  async copyConfigFiles(
-    sourceDir: string,
-    targetDir: string
-  ): Promise<FileCopyResult> {
+  async linkConfigFiles(sourceDir: string, targetDir: string): Promise<FileCopyResult> {
     const config = vscode.workspace.getConfiguration('commitview');
-    const defaultPatterns = config.get<string[]>('filesToCopy', [
-      '.env',
-      '.env.*',
-      '.npmrc',
-      '.yarnrc',
-      '.nvmrc',
+
+    const filePatterns = config.get<string[]>('filesToLink', [
+      '.env', '.env.*', '.npmrc', '.yarnrc', '.nvmrc',
     ]);
-    const additionalPatterns = config.get<string[]>('additionalFilesToCopy', []);
-    const warnOnSecrets = config.get<boolean>('warnOnSecretsCopy', true);
-    const secretsPatterns = config.get<string[]>('secretsPatterns', [
-      '*secret*',
-      '*credential*',
-      '*key*',
-      '*token*',
-      '*password*',
+    const directoryPatterns = config.get<string[]>('directoriesToLink', [
+      'node_modules', 'venv', '.venv', 'env', '__pycache__',
     ]);
+    const additionalPatterns = config.get<string[]>('additionalPatternsToLink', []);
 
-    const allPatterns = [...defaultPatterns, ...additionalPatterns];
+    const result: FileCopyResult = { linked: [], skipped: [], failed: [], warnings: [] };
 
-    const result: FileCopyResult = {
-      copied: [],
-      skipped: [],
-      failed: [],
-      warnings: [],
-    };
+    const files = this.findMatchingEntries(sourceDir, [...filePatterns, ...additionalPatterns], 'file');
+    const dirs = this.findMatchingEntries(sourceDir, directoryPatterns, 'directory');
 
-    // Find all matching files
-    const filesToCopy = await this.findMatchingFiles(sourceDir, allPatterns);
-
-    if (filesToCopy.length === 0) {
-      return result;
+    for (const file of files) {
+      this.linkEntry(sourceDir, targetDir, file, 'file', result);
     }
 
-    // Check for potential secrets
-    const potentialSecrets: string[] = [];
-    if (warnOnSecrets) {
-      for (const file of filesToCopy) {
-        if (this.matchesPatterns(file, secretsPatterns)) {
-          potentialSecrets.push(file);
-        }
-      }
-    }
-
-    // Show warning if secrets detected
-    if (potentialSecrets.length > 0) {
-      const proceed = await this.showSecretsWarning(potentialSecrets);
-      if (!proceed) {
-        result.skipped.push(...filesToCopy);
-        return result;
-      }
-    }
-
-    // Copy files
-    for (const file of filesToCopy) {
-      const sourcePath = path.join(sourceDir, file);
-      const targetPath = path.join(targetDir, file);
-
-      try {
-        // Ensure target directory exists
-        const targetDirPath = path.dirname(targetPath);
-        if (!fs.existsSync(targetDirPath)) {
-          fs.mkdirSync(targetDirPath, { recursive: true });
-        }
-
-        fs.copyFileSync(sourcePath, targetPath);
-        result.copied.push(file);
-
-        if (potentialSecrets.includes(file)) {
-          result.warnings.push(`Copied file that may contain secrets: ${file}`);
-        }
-      } catch (error) {
-        result.failed.push(file);
-      }
+    for (const dir of dirs) {
+      this.linkEntry(sourceDir, targetDir, dir, 'directory', result);
     }
 
     return result;
   }
 
-  private async findMatchingFiles(
-    dir: string,
-    patterns: string[]
-  ): Promise<string[]> {
-    const matches: string[] = [];
+  private linkEntry(
+    sourceDir: string,
+    targetDir: string,
+    name: string,
+    type: EntryType,
+    result: FileCopyResult
+  ): void {
+    const sourcePath = path.join(sourceDir, name);
+    const targetPath = path.join(targetDir, name);
+    const displayName = type === 'directory' ? `${name}/` : name;
 
-    try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (entry.isFile()) {
-          for (const pattern of patterns) {
-            if (this.matchesGlob(entry.name, pattern)) {
-              matches.push(entry.name);
-              break;
-            }
-          }
-        }
-      }
-    } catch {
-      // Directory read failed
+    if (fs.existsSync(targetPath)) {
+      result.skipped.push(displayName);
+      return;
     }
 
-    return matches;
+    try {
+      this.ensureParentDir(targetPath);
+      fs.symlinkSync(sourcePath, targetPath, type === 'directory' ? 'dir' : undefined);
+      result.linked.push(displayName);
+    } catch (error) {
+      result.failed.push(displayName);
+      result.warnings.push(`Failed to link ${displayName}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private ensureParentDir(targetPath: string): void {
+    const parentDir = path.dirname(targetPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+  }
+
+  private findMatchingEntries(dir: string, patterns: string[], type: EntryType): string[] {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      return entries
+        .filter(entry => (type === 'file' ? entry.isFile() : entry.isDirectory()))
+        .filter(entry => patterns.some(p => this.matchesGlob(entry.name, p)))
+        .map(entry => entry.name);
+    } catch (error) {
+      console.error(`Failed to read directory ${dir}:`, error);
+      return [];
+    }
   }
 
   private matchesGlob(filename: string, pattern: string): boolean {
-    // Convert glob pattern to regex
     const regexPattern = pattern
       .replace(/\./g, '\\.')
       .replace(/\*/g, '.*')
       .replace(/\?/g, '.');
-
-    const regex = new RegExp(`^${regexPattern}$`, 'i');
-    return regex.test(filename);
-  }
-
-  private matchesPatterns(filename: string, patterns: string[]): boolean {
-    const lowerFilename = filename.toLowerCase();
-
-    for (const pattern of patterns) {
-      const lowerPattern = pattern.toLowerCase();
-
-      // Handle glob patterns
-      if (lowerPattern.includes('*')) {
-        const parts = lowerPattern.split('*').filter(Boolean);
-        let matches = true;
-
-        for (const part of parts) {
-          if (!lowerFilename.includes(part)) {
-            matches = false;
-            break;
-          }
-        }
-
-        if (matches) {
-          return true;
-        }
-      } else if (lowerFilename.includes(lowerPattern)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private async showSecretsWarning(files: string[]): Promise<boolean> {
-    const fileList = files.slice(0, 5).join(', ');
-    const moreCount = files.length > 5 ? ` and ${files.length - 5} more` : '';
-
-    const message = `The following files may contain secrets and will be copied to the temporary worktree:\n\n${fileList}${moreCount}\n\nDo you want to proceed?`;
-
-    const result = await vscode.window.showWarningMessage(
-      message,
-      { modal: true },
-      'Copy Files',
-      'Skip Files'
-    );
-
-    return result === 'Copy Files';
+    return new RegExp(`^${regexPattern}$`, 'i').test(filename);
   }
 }
