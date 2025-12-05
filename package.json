@@ -2,7 +2,7 @@
   "name": "commitview",
   "displayName": "CommitView",
   "description": "Jump to any commit in a separate window without leaving your current work",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "ekko-sh",
   "icon": "icon.png",
   "license": "MIT",
